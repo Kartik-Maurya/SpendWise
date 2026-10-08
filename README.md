@@ -1,4 +1,4 @@
-# SpendWise v2.0.0 — Secure Personal Finance Management Platform
+# SpendWise: Multi-Feature Finance Tracker
 
 SpendWise is an open-source personal finance management application that helps you track income and expenses, set budgets, and understand your financial health. Version 2.0.0 builds on the v1.0.0 MVP by adding user accounts, secure authentication, financial analytics, budget management, and a privacy-focused interface.
 
@@ -7,7 +7,7 @@ SpendWise is an open-source personal finance management application that helps y
 
 ---
 
-## Stage 1 — Initial MVP (v1.0.0)
+## Stage 1 — Initial Release (v1.0.0)
 
 SpendWise v1.0.0 provided:
 
