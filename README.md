@@ -145,7 +145,7 @@ Express.js API
 ### Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/spendwise.git
+git clone https://github.com/Kartik-Maurya/SpendWise.git
 cd spendwise
 ```
 
