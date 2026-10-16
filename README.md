@@ -397,7 +397,6 @@ spendwise/
 
 ### Completed
 
-- v1.0.0 — Initial MVP (transactions, dashboard, SQLite)
 - v2.0.0 — Secure finance management platform (auth, budgets, analytics, encryption)
 
 ### Future Ideas
