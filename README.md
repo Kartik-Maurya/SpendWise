@@ -5,7 +5,7 @@ SpendWise is an open-source personal finance application that tracks income and 
 ![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> SpendWise is a student project (BE Semester 7, Data Science). Security is implemented defense-in-depth, but this is **not** production-grade banking software. See [Known limitations](#known-limitations).
+> SpendWise is a student project (BE Semester 7, IT). Security is implemented defense-in-depth, but this is **not** production-grade banking software. See [Known limitations](#known-limitations).
 
 ---
 
