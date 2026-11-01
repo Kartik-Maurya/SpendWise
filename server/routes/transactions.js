@@ -5,6 +5,9 @@ const requireAuth = require('../middleware/auth');
 
 router.get('/', requireAuth, transactionController.getAllTransactions);
 router.get('/summary', requireAuth, transactionController.getSummary);
+router.post('/import', requireAuth, transactionController.importTransactions);
+router.patch('/bulk', requireAuth, transactionController.bulkUpdateTransactions);
+router.post('/bulk-delete', requireAuth, transactionController.bulkDeleteTransactions);
 router.get('/:id', requireAuth, transactionController.getTransactionById);
 router.post('/', requireAuth, transactionController.createTransaction);
 router.put('/:id', requireAuth, transactionController.updateTransaction);

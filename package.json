@@ -1,10 +1,10 @@
 {
   "name": "spendwise",
-  "version": "2.0.0",
-  "description": "SpendWise v2.0.0 — Secure Personal Finance Management Platform",
+  "version": "3.0.0",
+  "description": "SpendWise v3.0.0 — Personal Finance Management and Forecasting Platform",
   "private": true,
   "scripts": {
-    "install-all": "cd server && npm install && cd ../client && npm install",
+    "install-all": "npm install && npm --prefix server install && npm --prefix client install",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "seed": "node server/seed.js"
   },

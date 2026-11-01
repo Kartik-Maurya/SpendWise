@@ -1,3 +1,15 @@
+const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Investment', 'Other Income'];
+const EXPENSE_CATEGORIES = [
+  'Food',
+  'Transport',
+  'Shopping',
+  'Bills',
+  'Entertainment',
+  'Education',
+  'Health',
+  'Other',
+];
+
 function validateEmail(email) {
   if (!email || typeof email !== 'string') return false;
   const trimmed = email.trim().toLowerCase();
@@ -20,9 +32,7 @@ function validateType(type) {
 }
 
 function validateCategory(category, type) {
-  const incomeCategories = ['Salary', 'Freelance', 'Investment', 'Other Income'];
-  const expenseCategories = ['Food', 'Transport', 'Shopping', 'Bills', 'Entertainment', 'Education', 'Health', 'Other'];
-  const allCategories = [...incomeCategories, ...expenseCategories];
+  const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
   if (!category || typeof category !== 'string') return false;
   return allCategories.includes(category);
 }
@@ -38,6 +48,8 @@ function validateFrequency(frequency) {
 }
 
 module.exports = {
+  INCOME_CATEGORIES,
+  EXPENSE_CATEGORIES,
   validateEmail,
   validatePassword,
   validateAmount,

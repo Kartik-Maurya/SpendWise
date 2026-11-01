@@ -41,7 +41,16 @@ async function processDueRecurring(userId) {
   let skipped = 0;
 
   for (const row of dueRows) {
-    const recurringDesc = row.description || '';
+    let recurringDesc = '';
+    if (row.description_encrypted) {
+      try {
+        recurringDesc = decrypt(row.description_encrypted) || '';
+      } catch (err) {
+        recurringDesc = '';
+      }
+    } else if (row.description) {
+      recurringDesc = row.description;
+    }
     const existingRows = await query.all(
       `SELECT description_encrypted FROM transactions
        WHERE user_id = ? AND type = ? AND category = ? AND date = ?`,
@@ -69,11 +78,20 @@ async function processDueRecurring(userId) {
       continue;
     }
 
-    const encryptedDesc = encrypt(row.description || '');
+    const encryptedDesc = encrypt(recurringDesc);
 
     const result = await query.run(
-      'INSERT INTO transactions (user_id, type, amount, category, description_encrypted, date, recurring_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [userId, row.type, Number(row.amount), row.category, encryptedDesc, today, row.id]
+      'INSERT INTO transactions (user_id, type, amount, category, description_encrypted, date, recurring_id, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        userId,
+        row.type,
+        Number(row.amount),
+        row.category,
+        encryptedDesc,
+        today,
+        row.id,
+        row.is_demo ? 1 : 0,
+      ]
     );
 
     created++;

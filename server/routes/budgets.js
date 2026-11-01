@@ -5,6 +5,7 @@ const requireAuth = require('../middleware/auth');
 
 router.get('/', requireAuth, budgetController.getAllBudgets);
 router.get('/warnings', requireAuth, budgetController.getBudgetWarnings);
+router.post('/import', requireAuth, budgetController.importBudgets);
 router.get('/:id', requireAuth, budgetController.getBudgetById);
 router.post('/', requireAuth, budgetController.createBudget);
 router.put('/:id', requireAuth, budgetController.updateBudget);

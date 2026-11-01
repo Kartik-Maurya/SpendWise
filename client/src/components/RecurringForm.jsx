@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { categories } from '../utils/format.js';
+import { categories, todayInputValue } from '../utils/format.js';
 
 export default function RecurringForm({ initialData, onSubmit, onCancel, loading }) {
   const [description, setDescription] = useState(initialData?.description || '');
@@ -7,7 +7,7 @@ export default function RecurringForm({ initialData, onSubmit, onCancel, loading
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [category, setCategory] = useState(initialData?.category || '');
   const [frequency, setFrequency] = useState(initialData?.frequency || 'monthly');
-  const [nextOccurrence, setNextOccurrence] = useState(initialData?.next_occurrence || new Date().toISOString().split('T')[0]);
+  const [nextOccurrence, setNextOccurrence] = useState(initialData?.next_occurrence || todayInputValue());
   const [isActive, setIsActive] = useState(initialData?.is_active !== 0);
   const [errors, setErrors] = useState({});
 

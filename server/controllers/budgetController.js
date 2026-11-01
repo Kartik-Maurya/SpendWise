@@ -1,5 +1,22 @@
 const query = require('../database/query');
 const logAudit = require('../utils/auditLogger');
+const { parseCsv } = require('../utils/csv');
+const {
+  IMPORT_MAX_BYTES,
+  IMPORT_MAX_ROWS,
+  IMPORT_ERROR_LIMIT,
+  mapHeaders,
+  parseImportAmount,
+  unguardFormula,
+  isMaskedValue,
+} = require('../utils/importHelpers');
+
+const IMPORT_HEADER_ALIASES = {
+  month: ['month'],
+  year: ['year'],
+  category: ['category', 'head'],
+  amount: ['amount', 'value', 'amount (inr)', 'amount inr'],
+};
 
 function getMonthYearParams(month, year) {
   const now = new Date();
@@ -269,6 +286,179 @@ exports.getBudgetWarnings = async (req, res, next) => {
 
     res.json(warnings);
   } catch (err) {
+    next(err);
+  }
+};
+
+exports.importBudgets = async (req, res, next) => {
+  let started = false;
+
+  try {
+    const csv = req.body && req.body.csv;
+
+    if (typeof csv !== 'string' || csv.trim() === '') {
+      return res.status(400).json({ error: 'Provide the CSV file contents in the csv field' });
+    }
+    if (Buffer.byteLength(csv, 'utf8') > IMPORT_MAX_BYTES) {
+      return res.status(413).json({ error: 'CSV files must be 2 MB or smaller' });
+    }
+
+    const parsed = parseCsv(csv);
+    if (parsed.length < 2) {
+      return res.status(400).json({ error: 'The CSV needs a header row and at least one budget' });
+    }
+
+    const mapping = mapHeaders(parsed[0], IMPORT_HEADER_ALIASES);
+    const missing = ['month', 'year', 'category', 'amount'].filter(
+      (field) => mapping[field] === undefined
+    );
+    if (missing.length) {
+      return res.status(400).json({
+        error: `Missing required column(s): ${missing.join(', ')}. Expected Month, Year, Category and Amount.`,
+      });
+    }
+
+    const dataRows = parsed.slice(1);
+    if (dataRows.length > IMPORT_MAX_ROWS) {
+      return res.status(413).json({
+        error: `A single import can contain at most ${IMPORT_MAX_ROWS} budgets`,
+      });
+    }
+
+    const cell = (row, field) =>
+      mapping[field] === undefined ? '' : String(row[mapping[field]] ?? '').trim();
+
+    const valid = [];
+    const errors = [];
+
+    dataRows.forEach((row, index) => {
+      const line = index + 2;
+      const rowErrors = [];
+
+      const month = Number(cell(row, 'month'));
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        rowErrors.push('Month must be between 1 and 12');
+      }
+
+      const year = Number(cell(row, 'year'));
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        rowErrors.push('Year must be between 2000 and 2100');
+      }
+
+      const category = unguardFormula(cell(row, 'category'));
+      if (!category) {
+        rowErrors.push('Category is required');
+      } else if (category.length > 100) {
+        rowErrors.push('Category must be 100 characters or fewer');
+      }
+
+      const rawAmount = cell(row, 'amount');
+      const amount = parseImportAmount(rawAmount);
+      if (amount === null) {
+        rowErrors.push(
+          isMaskedValue(rawAmount)
+            ? 'Masked exports cannot be imported. Download without privacy mode first'
+            : 'Amount must be a positive number'
+        );
+      }
+
+      if (rowErrors.length) {
+        errors.push({ line, message: rowErrors.join('; ') });
+        return;
+      }
+
+      valid.push({ line, month, year, category, amount });
+    });
+
+    const existing = await query.all('SELECT * FROM budgets WHERE user_id = ?', [req.user.id]);
+    const existingByKey = new Map();
+    for (const row of existing) {
+      existingByKey.set(`${row.category}|${row.month}|${row.year}`, row);
+    }
+
+    const toInsert = [];
+    const toUpdate = [];
+    const pending = new Set();
+    let duplicateCount = 0;
+    const duplicateRows = [];
+
+    for (const item of valid) {
+      const key = `${item.category}|${item.month}|${item.year}`;
+      const current = existingByKey.get(key);
+
+      if (!current) {
+        existingByKey.set(key, item);
+        pending.add(key);
+        toInsert.push(item);
+        continue;
+      }
+
+      if (Number(current.amount).toFixed(2) === Number(item.amount).toFixed(2)) {
+        duplicateCount += 1;
+        if (duplicateRows.length < 20) {
+          duplicateRows.push({
+            line: item.line,
+            summary: `${item.category} · ${item.month}/${item.year} · ${item.amount}`,
+          });
+        }
+        continue;
+      }
+
+      if (pending.has(key)) {
+        current.amount = item.amount;
+        continue;
+      }
+
+      toUpdate.push({ ...item, id: current.id });
+    }
+
+    if (toInsert.length || toUpdate.length) {
+      await query.run('BEGIN');
+      started = true;
+
+      for (const item of toInsert) {
+        await query.run(
+          'INSERT INTO budgets (user_id, category, amount, month, year) VALUES (?, ?, ?, ?, ?)',
+          [req.user.id, item.category, item.amount, item.month, item.year]
+        );
+      }
+
+      for (const item of toUpdate) {
+        await query.run(
+          'UPDATE budgets SET amount = ? WHERE id = ? AND user_id = ?',
+          [item.amount, item.id, req.user.id]
+        );
+      }
+
+      await query.run('COMMIT');
+      started = false;
+    }
+
+    logAudit(
+      req.user.id,
+      'budgets_imported',
+      'budget',
+      `Imported ${toInsert.length} budget(s) and updated ${toUpdate.length} from CSV (${duplicateCount} duplicate(s) skipped, ${errors.length} row(s) rejected)`,
+      req.ip
+    );
+
+    res.status(201).json({
+      totalRows: dataRows.length,
+      imported: toInsert.length,
+      updated: toUpdate.length,
+      duplicates: duplicateCount,
+      duplicateRows,
+      rejected: errors.length,
+      errors: errors.slice(0, IMPORT_ERROR_LIMIT),
+    });
+  } catch (err) {
+    if (started) {
+      try {
+        await query.run('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('[budgets] import rollback failed:', rollbackErr.message);
+      }
+    }
     next(err);
   }
 };

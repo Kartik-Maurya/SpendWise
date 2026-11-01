@@ -49,11 +49,13 @@ Or install manually:
 
 ```bash
 npm install
-cd server && npm install && cd ../..
+cd server && npm install && cd ..
 cd client && npm install && cd ..
 ```
 
 ### 5. Configure Environment Variables
+
+A full walkthrough, including password-reset email, is in [SETUP.md](SETUP.md).
 
 ```bash
 cd server
@@ -61,23 +63,30 @@ cp ../.env.example .env
 ```
 
 Edit `.env` and set:
-- `SESSION_SECRET` — a strong random string (e.g., `openssl rand -base64 48`)
+- `SESSION_SECRET` — a strong random string (e.g., `openssl rand -base64 48`); at least 32 characters is enforced in production
 - `ENCRYPTION_KEY` — a 32-byte hex string (e.g., `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+
+Optional variables:
+- `APP_URL` — public frontend URL used in password-reset links (falls back to `CORS_ORIGIN`)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` — reset email; without SMTP the reset link is printed to the server console
+- `CORS_ORIGIN` — allowed frontend origin (default `http://localhost:3000`)
+- `SPENDWISE_DB_PATH` — alternate database path for isolated runs
 
 > **Important:** Never commit the `.env` file. It is listed in `.gitignore`.
 
 ### 6. Database Setup
 
-The database is automatically initialized and migrated on server startup. If you have existing Stage 1 data in `server/database/spendwise.db`, it will be automatically migrated:
+The database is automatically initialized and migrated on server startup. Migrations are additive and idempotent. A v1.0.0 or v2.0.0 database is upgraded in place:
 
-1. New tables are created (`users`, `budgets`, `recurring_transactions`, `audit_logs`)
-2. Existing transactions are assigned to a default local user (`local@spendwise.app`)
-3. Existing plaintext descriptions are encrypted with AES-256-GCM
+1. Missing tables are created (`users`, `budgets`, `recurring_transactions`, `plans`, `budget_recommendations`, `password_resets`, `audit_logs`).
+2. Missing columns are added (`user_id`, encrypted descriptions, `password_changed_at`, `is_demo`, and related fields).
+3. Existing transactions are assigned to a default local user (`local@spendwise.app`).
+4. Existing plaintext descriptions are encrypted with AES-256-GCM.
 
 To start with a fresh database:
 
 ```bash
-rm server/database/spendwise.db server/.enc_key
+rm server/database/spendwise.db server/database/spendwise-sessions.db server/.enc_key
 ```
 
 To seed sample data:
@@ -85,6 +94,8 @@ To seed sample data:
 ```bash
 npm run seed
 ```
+
+For interactive sample data inside an existing account, use **Settings → Demo data**; demo rows are flagged and can be purged without touching the account's own records.
 
 ### 7. Start Development Servers
 
@@ -109,6 +120,8 @@ npm run dev
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:5000`
 
+On Windows you can also use `start.bat` and `stop.bat`, which manage both processes and record their state in `.run/`.
+
 ### 8. Make Your Changes
 
 Make your changes in the codebase. Please follow the existing code style and structure.
@@ -118,13 +131,27 @@ Make your changes in the codebase. Please follow the existing code style and str
 
 ### 9. Test Your Changes
 
-- Run the backend API tests: `node server/test_api.js`
-- Start the servers and test manually in the browser
-- Test with an empty database
-- Test with existing data (migration)
-- Verify user isolation: two accounts should not see each other's data
-- Verify rate limiting on auth endpoints
-- Verify security headers are present
+Each verification suite spawns its own server on an isolated port with a temporary database, so it does not touch your working data:
+
+```bash
+node server/verify_analytics.js      # analytics, plan, recommendations, backtest
+node server/verify_bulk.js           # bulk transaction and recurring actions
+node server/verify_dataset_import.js # CSV imports and duplicate handling
+node server/verify_export_audit.js   # CSV/JSON/XLSX exports and audit log
+node server/verify_privacy.js        # privacy masking, encryption, key rotation
+```
+
+Run them one at a time because several use port 5099. `node server/test_api.js` targets the running server on port 5000 and writes data, so use it only with a disposable database.
+
+Also:
+
+- Build the frontend: `npm run build --prefix client`
+- Test with an empty database and with an existing database (migration)
+- Test a user with history but no budgets, and a brand-new user, to check the readiness tiers
+- Verify isolation: two accounts must not see each other's transactions, budgets, schedules, plans, or audit events
+- Verify auth and password-write rate limits and security headers
+- Export with and without `privacy=1`, then re-import a non-masked copy and confirm duplicates are skipped
+- Print the monthly report as paginated and single-page PDFs using the browser's "Save as PDF"
 
 ### 10. Commit Your Changes
 
@@ -163,9 +190,12 @@ Go to the original SpendWise repository on GitHub and click "New Pull Request". 
 - Follow the existing project structure
 - Keep changes focused and minimal
 - Do NOT hardcode secrets or encryption keys
-- Do NOT store plaintext passwords
-- Do NOT return password hashes in API responses
-- Do NOT bypass authorization checks
+- Do NOT store plaintext passwords or plaintext transaction descriptions
+- Do NOT return password hashes, encryption keys, or reset tokens in API responses
+- Do NOT bypass authorization checks; scope every query to the authenticated user
+- Do NOT log reset tokens, passwords, or unredacted financial details
+- Keep imports validated: file size, row limits, and spreadsheet formula prefixes
+- Preserve server-side privacy masking for exports and reports
 
 ## Reporting Issues
 

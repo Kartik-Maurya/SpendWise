@@ -4,45 +4,63 @@ const path = require('path');
 
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
-let cachedKey = null;
+const KEY_FILE = path.join(__dirname, '..', '.enc_key');
+let cachedKeys = null;
+
+function parseKey(value, label) {
+  const key = Buffer.from(String(value || '').trim(), 'hex');
+  if (key.length !== 32) {
+    throw new Error(
+      `${label} must decode to exactly 32 bytes for AES-256-GCM. ` +
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+  return key;
+}
+
+function readKeyFile() {
+  const keyData = fs.readFileSync(KEY_FILE, 'utf8').trim();
+  return parseKey(keyData, 'The key in server/.enc_key');
+}
+
+function getKeyCandidates() {
+  if (cachedKeys) return cachedKeys;
+
+  const keys = [];
+
+  if (process.env.ENCRYPTION_KEY) {
+    keys.push(parseKey(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY'));
+  } else if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'ENCRYPTION_KEY is required in production. Set it to 32 random bytes as hex in the environment.'
+    );
+  } else if (fs.existsSync(KEY_FILE)) {
+    keys.push(readKeyFile());
+  } else {
+    const generated = crypto.randomBytes(32);
+    fs.writeFileSync(KEY_FILE, generated.toString('hex'), { mode: 0o600 });
+    keys.push(generated);
+    console.warn('WARNING: ENCRYPTION_KEY environment variable is not set.');
+    console.warn('A random encryption key has been generated and saved to server/.enc_key.');
+    console.warn('For production, set ENCRYPTION_KEY in .env (see .env.example).');
+  }
+
+  if (process.env.ENCRYPTION_KEY_PREVIOUS) {
+    for (const part of String(process.env.ENCRYPTION_KEY_PREVIOUS).split(',')) {
+      if (!part.trim()) continue;
+      const previous = parseKey(part, 'ENCRYPTION_KEY_PREVIOUS');
+      if (!keys.some((key) => key.equals(previous))) {
+        keys.push(previous);
+      }
+    }
+  }
+
+  cachedKeys = keys;
+  return cachedKeys;
+}
 
 function getEncryptionKey() {
-  if (cachedKey) return cachedKey;
-
-  const envKey = process.env.ENCRYPTION_KEY;
-  if (envKey) {
-    const key = Buffer.from(envKey, 'hex');
-    if (key.length !== 32) {
-      throw new Error(
-        'ENCRYPTION_KEY must decode to exactly 32 bytes for AES-256-GCM. ' +
-        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
-      );
-    }
-    cachedKey = key;
-    return cachedKey;
-  }
-
-  const keyFile = path.join(__dirname, '..', '.enc_key');
-  if (fs.existsSync(keyFile)) {
-    try {
-      const keyData = fs.readFileSync(keyFile, 'utf8').trim();
-      const key = Buffer.from(keyData, 'hex');
-      if (key.length !== 32) {
-        throw new Error('Invalid encryption key in .enc_key file');
-      }
-      cachedKey = key;
-      return cachedKey;
-    } catch (err) {
-      throw new Error('Failed to read encryption key file: ' + err.message);
-    }
-  }
-
-  cachedKey = crypto.randomBytes(32);
-  fs.writeFileSync(keyFile, cachedKey.toString('hex'));
-  console.warn('WARNING: ENCRYPTION_KEY environment variable is not set.');
-  console.warn('A random encryption key has been generated and saved to server/.enc_key.');
-  console.warn('For production, set ENCRYPTION_KEY in your .env file (see .env.example).');
-  return cachedKey;
+  return getKeyCandidates()[0];
 }
 
 function encrypt(plaintext, key) {
@@ -57,26 +75,55 @@ function encrypt(plaintext, key) {
   return Buffer.concat([iv, authTag, encrypted]).toString('base64');
 }
 
+function decryptWithKey(ciphertext, key) {
+  const data = Buffer.from(ciphertext, 'base64');
+  if (data.length < IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error('Ciphertext too short');
+  }
+  const iv = data.subarray(0, IV_LENGTH);
+  const authTag = data.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+  const encrypted = data.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString('utf8');
+}
+
 function decrypt(ciphertext, key) {
   if (!ciphertext) {
     return null;
   }
-  const k = key || getEncryptionKey();
-  try {
-    const data = Buffer.from(ciphertext, 'base64');
-    if (data.length < IV_LENGTH + AUTH_TAG_LENGTH) {
-      throw new Error('Ciphertext too short');
+  const keys = key ? [key] : getKeyCandidates();
+  let lastError = null;
+  for (const candidate of keys) {
+    try {
+      return decryptWithKey(ciphertext, candidate);
+    } catch (err) {
+      lastError = err;
     }
-    const iv = data.slice(0, IV_LENGTH);
-    const authTag = data.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
-    const encrypted = data.slice(IV_LENGTH + AUTH_TAG_LENGTH);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', k, iv);
-    decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-    return decrypted.toString('utf8');
-  } catch (err) {
-    throw new Error('Decryption failed: invalid encryption key or corrupted data');
+  }
+  throw new Error(
+    `Decryption failed: invalid encryption key or corrupted data${lastError ? ` (${lastError.message})` : ''}`
+  );
+}
+
+function verifyEncryption() {
+  const sample = `spendwise-key-check-${Date.now()}`;
+  const roundTrip = decrypt(encrypt(sample));
+  if (roundTrip !== sample) {
+    throw new Error('Encryption self-test failed: ciphertext did not round-trip');
   }
 }
 
-module.exports = { getEncryptionKey, encrypt, decrypt };
+function resetKeyCache() {
+  cachedKeys = null;
+}
+
+module.exports = {
+  getEncryptionKey,
+  getKeyCandidates,
+  encrypt,
+  decrypt,
+  verifyEncryption,
+  resetKeyCache,
+};

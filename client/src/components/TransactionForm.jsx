@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { categories } from '../utils/format.js';
+import { categories, todayInputValue } from '../utils/format.js';
 
 const FREQUENCIES = [
   { value: 'weekly', label: 'Weekly' },
@@ -7,12 +7,19 @@ const FREQUENCIES = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-export default function TransactionForm({ onSubmit, initialData, onCancel, loading, submitLabel }) {
+export default function TransactionForm({
+  onSubmit,
+  initialData,
+  onCancel,
+  loading,
+  submitLabel,
+  error,
+}) {
   const [type, setType] = useState(initialData?.type || 'expense');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [category, setCategory] = useState(initialData?.category || '');
   const [description, setDescription] = useState(initialData?.description || '');
-  const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(initialData?.date || todayInputValue());
 
   const [makeRecurring, setMakeRecurring] = useState(!!initialData?.recurringId);
   const [frequency, setFrequency] = useState(initialData?.frequency || 'weekly');
@@ -22,7 +29,6 @@ export default function TransactionForm({ onSubmit, initialData, onCancel, loadi
 
   const validate = () => {
     const newErrors = {};
-    if (!type) newErrors.type = 'Type is required';
     if (!amount || parseFloat(amount) <= 0) newErrors.amount = 'Amount must be greater than zero';
     if (!category) newErrors.category = 'Category is required';
     if (!date) newErrors.date = 'Date is required';
@@ -54,14 +60,18 @@ export default function TransactionForm({ onSubmit, initialData, onCancel, loadi
     onSubmit(data);
   };
 
-  const handleTypeChange = (e) => {
-    setType(e.target.value);
+  const handleTypeChange = (nextType) => {
+    if (nextType === type) return;
+    setType(nextType);
     setCategory('');
     setErrors({});
   };
 
   const handleDateChange = (e) => {
     setDate(e.target.value);
+    if (errors.date) {
+      setErrors((prev) => ({ ...prev, date: undefined }));
+    }
     if (!makeRecurring) {
       setNextOccurrence(e.target.value);
     }
@@ -77,86 +87,124 @@ export default function TransactionForm({ onSubmit, initialData, onCancel, loadi
 
   return (
     <form className="transaction-form" onSubmit={handleSubmit}>
-      {errors.form && <div className="error-message">{errors.form}</div>}
+      {error && (
+        <div className="error-message" role="alert">
+          {error}
+        </div>
+      )}
 
-      <div className="form-group">
-        <label htmlFor="type">Type</label>
-        <select id="type" value={type} onChange={handleTypeChange} disabled={loading}>
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
-        </select>
-        {errors.type && <span className="form-error">{errors.type}</span>}
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="amount">Amount (₹)</label>
-        <input
-          id="amount"
-          type="number"
-          step="0.01"
-          min="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          disabled={loading}
-        />
-        {errors.amount && <span className="form-error">{errors.amount}</span>}
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="category">Category</label>
-        <select
-          id="category"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
+      <div className="txn-type-toggle" role="group" aria-label="Transaction type">
+        <button
+          type="button"
+          className={`txn-type-option expense ${type === 'expense' ? 'active' : ''}`}
+          aria-pressed={type === 'expense'}
+          onClick={() => handleTypeChange('expense')}
           disabled={loading}
         >
-          <option value="">Select category</option>
-          {categories[type].map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-        {errors.category && <span className="form-error">{errors.category}</span>}
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="description">Description</label>
-        <input
-          id="description"
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Enter description"
+          <span aria-hidden="true">↓</span> Expense
+        </button>
+        <button
+          type="button"
+          className={`txn-type-option income ${type === 'income' ? 'active' : ''}`}
+          aria-pressed={type === 'income'}
+          onClick={() => handleTypeChange('income')}
           disabled={loading}
-          maxLength={500}
-        />
+        >
+          <span aria-hidden="true">↑</span> Income
+        </button>
       </div>
 
-      <div className="form-group">
-        <label htmlFor="date">Date</label>
-        <input
-          id="date"
-          type="date"
-          value={date}
-          onChange={handleDateChange}
-          disabled={loading}
-        />
-        {errors.date && <span className="form-error">{errors.date}</span>}
-      </div>
+      <div className="txn-form-grid">
+        <div className="form-group">
+          <label htmlFor="amount">Amount</label>
+          <div className="amount-field">
+            <span className="amount-prefix" aria-hidden="true">₹</span>
+            <input
+              id="amount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                if (errors.amount) {
+                  setErrors((prev) => ({ ...prev, amount: undefined }));
+                }
+              }}
+              placeholder="0.00"
+              disabled={loading}
+              autoFocus
+            />
+          </div>
+          {errors.amount && <span className="form-error">{errors.amount}</span>}
+        </div>
 
-      <div className="form-group checkbox-group">
-        <label className="checkbox-label">
+        <div className="form-group">
+          <label htmlFor="category">Category</label>
+          <select
+            id="category"
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              if (errors.category) {
+                setErrors((prev) => ({ ...prev, category: undefined }));
+              }
+            }}
+            disabled={loading}
+          >
+            <option value="">Select category</option>
+            {categories[type].map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+          {errors.category && <span className="form-error">{errors.category}</span>}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="date">Date</label>
           <input
-            type="checkbox"
-            checked={makeRecurring}
-            onChange={handleMakeRecurringChange}
+            id="date"
+            type="date"
+            value={date}
+            onChange={handleDateChange}
             disabled={loading}
           />
-          <span>Make Recurring</span>
-        </label>
+          {errors.date && <span className="form-error">{errors.date}</span>}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="description">
+            Description <span className="label-optional">optional</span>
+          </label>
+          <input
+            id="description"
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Groceries at DMart"
+            disabled={loading}
+            maxLength={500}
+          />
+        </div>
       </div>
+
+      <label className={`recurring-toggle ${makeRecurring ? 'on' : ''}`}>
+        <input
+          type="checkbox"
+          checked={makeRecurring}
+          onChange={handleMakeRecurringChange}
+          disabled={loading}
+        />
+        <span className="recurring-toggle-text">
+          <span className="recurring-toggle-title">Repeat this transaction</span>
+          <span className="recurring-toggle-hint">
+            Save it as a recurring schedule so upcoming entries are added automatically.
+          </span>
+        </span>
+      </label>
 
       {makeRecurring && (
         <div className="recurring-fields">
@@ -191,15 +239,15 @@ export default function TransactionForm({ onSubmit, initialData, onCancel, loadi
         </div>
       )}
 
-      <div className="form-actions">
-        <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? 'Saving...' : submitLabel || (initialData ? 'Update Transaction' : 'Add Transaction')}
-        </button>
+      <div className="form-actions txn-form-actions">
         {onCancel && (
           <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
             Cancel
           </button>
         )}
+        <button type="submit" className="btn btn-primary" disabled={loading}>
+          {loading ? 'Saving…' : submitLabel || (initialData ? 'Save changes' : 'Add transaction')}
+        </button>
       </div>
     </form>
   );

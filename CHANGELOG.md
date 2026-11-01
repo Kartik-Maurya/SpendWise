@@ -6,6 +6,99 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [3.0.0] — 2026-11-01
+
+### Added
+
+**Forecasting and planning**
+
+- **Monthly plan** — income assumption, savings target, and objective (`savings` or `overrun`) per month, stored in a new `plans` table
+- **Expense and income forecasts** — median of the last three completed months with a capped Theil–Sen trend, 80% band, and confidence level
+- **Safe to spend** — available budget after spend and committed recurring charges, expressed as a total and a daily allowance
+- **Spending pace** — per-budget projected usage that includes remaining recurring occurrences
+- **Budget recommendations** — objective-aware reallocation with essential-category defaults, floors, stability limits, and an apply action
+- **Forecast and recommendation backtesting** over 3–12 months, including MAE/MAPE and naive/proportional baselines
+- **Proof drawers** — method, inputs, assumptions, confidence, and trace for every headline number
+- **Insight feed** — typed, severity-ranked observations, capped at 12 items
+- **Anomaly detection** — robust modified z-score (MAD) over a 365-day window
+- **Subscription detection** — near-identical charges on weekly, monthly, and yearly cadences
+- **Readiness tiers** — Getting started, Pacing, Forecast and plan, and Seasonal view
+
+**Data portability and reporting**
+
+- **CSV export** for transactions, recurring schedules, budgets, and plans, with a privacy-mask option
+- **JSON backup** of all financial datasets
+- **Excel workbook export** with four data sheets, an About sheet, styling, filters, and real date cells
+- **Guided import** for `.xlsx` workbooks and SpendWise `.json` backups, with preview, dataset selection, duplicate detection, conflict reporting, and transactional commit
+- **Per-dataset CSV import** for transactions, recurring schedules, and budgets
+- **Masked-export detection** — privacy-masked files are rejected on import
+- **Printable monthly report** — self-contained HTML with at-a-glance totals, insights, pacing, anomalies, rebalance proposal, recurring commitments, and plan assumptions
+- **Print kit** — A4, US Letter, and US Legal paper; compact, normal, and wide margins; paginated or single continuous page sized to the content
+
+**Audit and accounts**
+
+- **Audit filters** — search, category, date range, sort, pagination, and per-category counts
+- **Audit CSV export** and a **recommendation trail** of applied batches
+- **Change password** from Settings with reuse checks and session invalidation
+- **Forgot/reset password** with 30-minute, single-use, hashed tokens and optional SMTP delivery
+- **Encryption-key rotation** through `ENCRYPTION_KEY_PREVIOUS` and a re-encryption CLI
+- **Demo data** — six months of sample history, three recurring templates, seven budgets, and a plan, with load, status, and confirmed purge
+- **New tables** — `plans`, `budget_recommendations`, and `password_resets`
+- **New columns** — `users.password_changed_at`; `transactions.recurring_id`, `is_essential`, `merchant`; `recurring_transactions.description_encrypted`; `is_demo` on the four financial tables
+- **New indexes** for user/date, recurring due dates, recommendation periods, reset tokens, and audit history
+
+**Interface and accessibility**
+
+- **URL-based routing** with lazy-loaded pages and browser navigation
+- **Account menu** and **mobile navigation drawer** with focus trapping
+- **Theme menu** for light, dark, and system themes
+- **Transaction dialog** for adding and editing without leaving the page
+- **Bulk actions** for transactions and recurring schedules (edit type/category/date, delete)
+- **Unified Transactions screen** with transaction and recurring tabs
+- **Chart data tables** and an expandable chart modal
+- **Keyboard shortcut registry** with view, rebind, conflict handling, and persistence
+- **Accessibility sweep** — skip link, landmarks, focus states, labeled controls, live regions, and reduced motion
+- **Privacy mode** synchronized across tabs, with a shortcut and chart-surface masking
+- **Demo onboarding** banner on the Dashboard
+
+### Improved
+
+- **Dashboard** — unified alert rail with budget-first ordering, compact expandable charts, and clearer empty states
+- **Charts** — themed tooltips, compact axis labels, consistent legends, and donut labels that avoid overlap
+- **Visual design** — cool-neutral light palette and neutral charcoal dark mode with semantic alert colors
+- **Settings** — consolidated export/backup, data import, demo controls, password, appearance, privacy, and shortcuts
+- **Budgets** — shared period control and consistent warning spacing
+- **Recurring** — parity with transactions for bulk actions, imports, and card layout
+- **Navigation** — reordered links, account menu, and responsive drawer
+- **Reports** — deterministic page width, tighter content height, and print guidance for system PDF printers
+- **Validation and errors** — consistent server messages and client-side field feedback
+- **Seed script** — aligned with the current schema
+
+### Security
+
+- Password-reset tokens are stored as SHA-256 hashes, expire after 30 minutes, work once, and are invalidated by a password change
+- Password changes invalidate sessions established before `password_changed_at`
+- Transaction **and** recurring-template descriptions are encrypted with AES-256-GCM
+- Encryption keys can be rotated without data loss; unreadable rows block the rotation
+- Exports and the monthly report mask amounts and hide descriptions server-side when privacy is requested
+- Audit details redact email addresses and rupee amounts before storage
+- Login, registration, forgot-password, and password-write endpoints are rate-limited separately
+- Import rejects masked files, oversize files, too many rows, and formula-injection prefixes
+- Bulk operations verify ownership of every ID before writing
+- Demo rows are isolated with an `is_demo` flag and a confirmed, scoped purge
+
+### Fixed
+
+- Horizontal page overflow on wide tables and charts
+- Donut chart label collisions and clipped axis labels
+- Dashboard pie chart alignment and Income vs Expenses labeling
+- Budget warning card spacing
+- Privacy values flashing before the first paint
+- Chart tooltips remaining readable while the chart surface is obscured in privacy mode
+- Seed script failures against the current schema
+
+---
+
 ## [2.0.0] — 2026-09-06
 
 ### Added
@@ -54,9 +147,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Error handling** — generic error messages prevent information leakage
 - **API** — all endpoints now require authentication and enforce user-scoped authorization
 - **Database queries** — all use parameterized prepared statements (SQL injection prevention)
-- **Privacy mode** — expanded to mask all monetary values (transactions, dashboard, budgets, analytics, chart tooltips) and blur charts when active; implemented via a centralized `usePrivacyFormat` hook and reusable `PrivacyAmount` component
-- **Settings page** — now linked from the Navbar (previously implemented but unreachable by navigation)
-- **CSV export** — export button also available on the Transactions page header for discoverability
 
 ### Security
 

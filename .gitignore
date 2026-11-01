@@ -1,41 +1,59 @@
 # Dependencies
 node_modules/
 
-# Build outputs
+# Build output
 dist/
 build/
+coverage/
 
-# Environment variables
+# Environment files (the template .env.example is committed)
 .env
+.env.*
+!.env.example
 .env.local
-
-# Encryption key file (generated, never commit)
-.enc_key
 .env.development.local
 .env.test.local
 .env.production.local
 
+# Generated encryption key — losing this makes stored descriptions unreadable
+.enc_key
+
+# Local process state (start.bat / stop.bat)
+.run/
+
+# Databases, session stores and backups (created on first run)
+*.db
+*.db-*
+*.db.bak*
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+server/tmp_verify_*
+
 # Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Archives and exports produced locally
+*.zip
+*.7z
+
+# Office lock files (created while a document is open)
+~$*
+
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Testing
-coverage/

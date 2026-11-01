@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { useTheme } from '../contexts/ThemeContext.jsx';
 import AuthForm from '../components/AuthForm.jsx';
+import ThemeMenu from '../components/ThemeMenu.jsx';
 
-export default function Login({ onNavigate, onSuccess }) {
+export default function Login({ onSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const { theme, toggleTheme } = useTheme();
 
   const handleSubmit = async (formData) => {
     setLoading(true);
@@ -32,22 +32,24 @@ export default function Login({ onNavigate, onSuccess }) {
         </div>
         <AuthForm mode="login" onSubmit={handleSubmit} error={error} loading={loading} />
         <div className="auth-footer">
-          <button
+          <Link className="link-button" to="/forgot-password">
+            Forgot password?
+          </Link>
+        </div>
+        <div className="auth-footer">
+          <Link
             className="btn btn-ghost btn-small"
-            onClick={() => onNavigate('register')}
-            disabled={loading}
+            to="/register"
+            aria-disabled={loading}
+            onClick={(e) => {
+              if (loading) e.preventDefault();
+            }}
           >
             Need an account? Register
-          </button>
+          </Link>
         </div>
       </div>
-      <button
-        className="theme-toggle-circle"
-        onClick={toggleTheme}
-        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-      >
-        {theme === 'light' ? '🌙' : '☀️'}
-      </button>
+      <ThemeMenu className="theme-menu-auth" />
     </div>
   );
 }

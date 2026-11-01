@@ -1,4 +1,9 @@
 
+export function todayInputValue(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function formatCurrency(amount) {
   if (amount === null || amount === undefined) return '';
   return new Intl.NumberFormat('en-IN', {
@@ -7,6 +12,24 @@ export function formatCurrency(amount) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+export function formatCompactCurrency(amount) {
+  if (amount === null || amount === undefined) return '';
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric)) return '';
+
+  const sign = numeric < 0 ? '-' : '';
+  const absolute = Math.abs(numeric);
+  const trim = (value) => {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  };
+
+  if (absolute >= 1e7) return `${sign}₹${trim(absolute / 1e7)}C`;
+  if (absolute >= 1e5) return `${sign}₹${trim(absolute / 1e5)}L`;
+  if (absolute >= 1e3) return `${sign}₹${trim(absolute / 1e3)}K`;
+  return `${sign}₹${Math.round(absolute)}`;
 }
 
 export function formatDate(dateString) {

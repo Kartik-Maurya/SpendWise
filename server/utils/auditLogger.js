@@ -1,4 +1,5 @@
 const db = require('../database/init');
+const { redactDetail } = require('./redact');
 
 function logAudit(userId, action, resource, detail, ipAddress) {
   const sql =
@@ -7,7 +8,7 @@ function logAudit(userId, action, resource, detail, ipAddress) {
     userId || null,
     action,
     resource || null,
-    detail || null,
+    redactDetail(detail) || null,
     ipAddress || null,
   ];
   db.run(sql, params, (err) => {

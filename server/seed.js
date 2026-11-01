@@ -1,51 +1,54 @@
 require('dotenv').config();
 
 const db = require('./database/init');
-const { encrypt } = require('./utils/encryption');
+const query = require('./database/query');
+const { loadDemoData } = require('./demo/service');
 
-db.ready.then(async () => {
-  const sampleTransactions = [
-    { type: 'income', amount: 50000, category: 'Salary', description: 'Monthly salary', date: '2026-09-01' },
-    { type: 'income', amount: 5000, category: 'Freelance', description: 'Freelance project', date: '2026-09-03' },
-    { type: 'expense', amount: 1200, category: 'Food', description: 'Groceries', date: '2026-09-02' },
-    { type: 'expense', amount: 300, category: 'Transport', description: 'Metro pass', date: '2026-09-02' },
-    { type: 'expense', amount: 2000, category: 'Shopping', description: 'New shoes', date: '2026-09-04' },
-    { type: 'expense', amount: 1500, category: 'Bills', description: 'Electricity bill', date: '2026-09-05' },
-    { type: 'expense', amount: 500, category: 'Entertainment', description: 'Movie night', date: '2026-09-05' },
-    { type: 'expense', amount: 400, category: 'Food', description: 'Lunch with friends', date: '2026-09-06' },
-    { type: 'expense', amount: 800, category: 'Transport', description: 'Cab ride', date: '2026-09-06' },
-    { type: 'income', amount: 2000, category: 'Investment', description: 'Dividend', date: '2026-09-07' },
-    { type: 'expense', amount: 1500, category: 'Health', description: 'Medicine', date: '2026-09-07' },
-    { type: 'expense', amount: 2500, category: 'Education', description: 'Online course', date: '2026-09-08' },
-  ];
+db.ready
+  .then(async () => {
+    const user = await query.get('SELECT id, email FROM users WHERE email = ?', [
+      'local@spendwise.app',
+    ]);
+    if (!user) {
+      throw new Error('The local@spendwise.app user does not exist');
+    }
 
-  const user = await db.get('SELECT id FROM users WHERE email = ?', ['local@spendwise.app']);
-  const userId = user ? user.id : 1;
+    const result = await loadDemoData(user.id);
 
-  const insert = db.prepare(
-    'INSERT INTO transactions (user_id, type, amount, category, description_encrypted, date) VALUES (?, ?, ?, ?, ?, ?)'
-  );
+    if (result.alreadyLoaded) {
+      console.log('Demo data is already loaded for %s (id=%d).', user.email, user.id);
+      console.log('  Transactions: %d', result.status.transactions);
+      console.log('  Budgets: %d', result.status.budgets);
+      console.log('  Recurring templates: %d', result.status.recurring);
+      console.log('  Monthly plans: %d', result.status.plans);
+    } else {
+      console.log('Seeded demo data for %s (id=%d):', user.email, user.id);
+      console.log('  Transactions: %d', result.loaded.transactions);
+      console.log('  Budgets: %d', result.loaded.budgets);
+      console.log('  Recurring templates: %d', result.loaded.recurring);
+      console.log('  Monthly plans: %d', result.loaded.plans);
 
-  let completed = 0;
-
-  sampleTransactions.forEach((tx) => {
-    const encryptedDesc = encrypt(tx.description);
-    insert.run(
-      [userId, tx.type, tx.amount, tx.category, encryptedDesc, tx.date],
-      function (err) {
-        if (err) {
-          console.error('Failed to insert transaction:', err.message);
-        }
-        completed++;
-        if (completed === sampleTransactions.length) {
-          console.log(`Seeded ${completed} transactions successfully`);
-          db.close();
-          process.exit(0);
-        }
+      if (result.skipped.budgets.length > 0) {
+        console.log('  Skipped existing budgets: %s', result.skipped.budgets.join(', '));
       }
-    );
+      if (result.skipped.recurring) {
+        console.log('  Skipped recurring templates because this account already has its own.');
+      }
+      if (result.skipped.plan) {
+        console.log('  Skipped the monthly plan because this month already has one.');
+      }
+    }
+
+    await new Promise((resolve, reject) => {
+      db.close((err) => (err ? reject(err) : resolve()));
+    });
+  })
+  .catch(async (err) => {
+    console.error('Seeding failed:', err.message);
+    try {
+      await new Promise((resolve) => db.close(() => resolve()));
+    } catch (closeErr) {
+      // ignore close errors after a failed seed
+    }
+    process.exit(1);
   });
-}).catch((err) => {
-  console.error('Database initialization failed:', err.message);
-  process.exit(1);
-});
